@@ -168,7 +168,7 @@ Project Settings → API,复制三样(先放记事本):
 1. 你的仓库 → Actions 分页,若有提示点「I understand my workflows, enable them」
 2. 左边点 Sync Content → 右边 Run workflow → 绿色 Run workflow
 3. 之后自动接力:转录 → AI 拆解 → 生成网页。首跑约 10-40 分钟,去忙别的
-4. 跑完打开:https://你的用户名.github.io/仓库名/
+4. 跑完不用自己拼网址:去 **Settings → Pages**,顶部会显示「Your site is live at …」,点 **Visit site** 就打开你的 dashboard。加书签,以后每周开它。
 
 检查三样:
 - [ ] 网页打得开,有爆款卡片
