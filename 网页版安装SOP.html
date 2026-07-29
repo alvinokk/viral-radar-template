@@ -95,6 +95,16 @@
   .use-btn{background:#2D8A4E; color:#fff; font-weight:700; font-size:15px; border-radius:8px; padding:11px 22px}
   .caret{color:var(--mute); font-size:13px}
 
+  .cta{display:flex; align-items:center; gap:14px; text-decoration:none;
+    background:#2D8A4E; color:#fff; border-radius:12px; padding:16px 20px; margin:18px 0;
+    box-shadow:0 3px 10px rgba(45,138,78,.28); transition:background .15s}
+  .cta:hover{background:#256E3F}
+  .cta .ico{font-size:24px; flex:0 0 auto}
+  .cta .txt{display:flex; flex-direction:column; line-height:1.35}
+  .cta .txt b{font-size:16.5px; color:#fff}
+  .cta .txt small{font-size:12.5px; color:rgba(255,255,255,.82); font-weight:400}
+  .cta .arw{margin-left:auto; font-size:22px; flex:0 0 auto}
+
   .kv{align-self:stretch; display:grid; grid-template-columns:auto 1fr; gap:10px 14px; align-items:center; padding:4px 0}
   .kv .k{color:var(--ink); font-weight:700; font-size:13.5px; font-family:"Courier New",monospace; white-space:nowrap}
   .kv .v{background:var(--surface); border-radius:9px; padding:7px 13px; font-size:13px; color:var(--mute)}
@@ -143,18 +153,28 @@
 
 <section>
   <div class="step-head"><div class="step-num">1</div><div class="t">复制模板到你的账号</div><div class="place">在 GitHub</div></div>
+
+  <p style="margin-top:8px">点下面这个按钮,<b class="hl">直接开始</b>——会打开 GitHub 的「从模板建新仓库」页面:</p>
+  <a class="cta" href="https://github.com/alvinokk/viral-radar-template/generate" target="_blank" rel="noopener">
+    <span class="ico">📦</span>
+    <span class="txt"><b>一键复制模板到我的账号</b><small>打开 GitHub 建仓库页,没登录会先叫你登录,登录后自动回到这页</small></span>
+    <span class="arw">→</span>
+  </a>
+
+  <p style="margin-top:14px"><b class="hl">打开后就填 3 样:</b></p>
   <ol>
-    <li>打开老师发的模板地址</li>
-    <li>点右上角绿色按钮 <span class="say">Use this template</span> → Create a new repository</li>
-    <li>Repository name 填你想要的名字(例:<code>my-viral-radar</code>)</li>
-    <li>选 <b class="hl">Public</b> → 点 Create repository</li>
+    <li><b class="hl">Owner</b> 选你自己的账号</li>
+    <li><b class="hl">Repository name</b> 填你想要的名字(例:<code>my-viral-radar</code>)</li>
+    <li>选 <b class="hl">Public</b> → 点 <b class="hl">Create repository</b></li>
   </ol>
+
   <div class="window">
     <div class="bar"><span class="dot" style="background:#C0392B"></span><span class="dot" style="background:#F7C633"></span><span class="dot" style="background:#2D8A4E"></span><span class="addr mono">github.com/alvinokk/viral-radar-template</span></div>
     <div class="win-body">
-      <div class="repo-line"><span>📦</span><span class="mono">viral-radar-template</span><span style="margin-left:auto" class="use-btn">Use this template ▾</span></div>
+      <div class="repo-line"><span>📦</span><span class="mono">viral-radar-template</span><a href="https://github.com/alvinokk/viral-radar-template/generate" target="_blank" rel="noopener" style="margin-left:auto; text-decoration:none" class="use-btn">Use this template ▾</a></div>
     </div>
   </div>
+  <div class="ok"><b>按钮打不开?</b> 手动打开 <code class="mono">github.com/alvinokk/viral-radar-template</code>,点右上角绿色 <b>Use this template</b> 一样效果。</div>
   <div class="metaphor"><b>比喻</b> 像复制一份 Notion 模板到自己账号——点一下,就有了自己的一份。</div>
 </section>
 
