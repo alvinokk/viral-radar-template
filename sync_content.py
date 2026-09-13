@@ -3,20 +3,39 @@
 Viral Content Sync — Supabase edition
 --------------------------------------
 Scrapes one tracker's competitors via Apify (profiles for follower counts,
-then recent posts), filters viral content (ER > 3% AND comments > 50), and
-UPSERTS into the Supabase `posts` table.
+then recent posts), keeps the standout posts, and UPSERTS into the Supabase
+`posts` table.
+
+A post is kept when it clears a small noise floor AND passes ANY of three
+tests (OR, not AND -- the old AND rule starved small and large accounts
+alike):
+  1. engagement rate  >= MIN_ER
+  2. comments         >= MIN_COMMENTS
+  3. engagements      >= OUTLIER_X x that account's OWN median engagements
+     (median taken over the posts scraped this run -- a real baseline, so a
+     5k-follower account is judged against itself, not against a 300k one)
+On top of that, every account always contributes its TOP_N_PER_COMP best
+posts, so a quiet week still fills the dashboard instead of showing zero.
+
+Widening the filter costs NOTHING extra on Apify: the scrape already pulls
+every post, the filter only decides what gets stored.
 
 Upsert notes: existing posts get their metrics/video URL refreshed (fresh
 CDN links let previously skipped videos transcribe); status / transcript /
 ai_breakdown are never in the payload, so worked rows are never clobbered.
 engagement_rate and viral_score are generated columns — never written.
 
-Env: TRACKER ("IG" or "AI"), APIFY_TOKEN, SUPABASE_URL,
-     SUPABASE_SERVICE_ROLE_KEY
+Env (required): TRACKER ("IG" or "AI"), APIFY_TOKEN, SUPABASE_URL,
+                SUPABASE_SERVICE_ROLE_KEY
+Env (tuning, all optional -- set as GitHub Actions *Variables*):
+     MIN_ER (0.02)  MIN_COMMENTS (15)  MIN_ENGAGE (20)  OUTLIER_X (1.5)
+     TOP_N_PER_COMP (3)  MAX_PER_COMP (15)  DAYS_BACK (60)
+     RESULTS_LIMIT (50)  MAX_ROWS (2500)
 """
 
 import json
 import os
+import statistics
 import sys
 import time
 import urllib.error
@@ -29,10 +48,34 @@ SUPABASE_URL = (os.environ.get("SUPABASE_URL") or "").rstrip("/")
 
 POLL_INTERVAL = 30
 POLL_TIMEOUT = 900
-MIN_ER = 0.03
-MIN_COMMENTS = 50
-MAX_ROWS = 1500          # keep the baked dashboard payload light
 PROTECTED = ("拍摄中", "已处理")
+
+
+def _envf(name, default):
+    try:
+        return float(os.environ.get(name) or default)
+    except ValueError:
+        return float(default)
+
+
+def _envi(name, default):
+    try:
+        return int(float(os.environ.get(name) or default))
+    except ValueError:
+        return int(default)
+
+
+# --- tuning knobs (GitHub Actions Variables; defaults are the loose set) ---
+MIN_ER         = _envf("MIN_ER", 0.02)        # 2% engagement rate
+MIN_COMMENTS   = _envi("MIN_COMMENTS", 15)    # absolute comment count
+MIN_ENGAGE     = _envi("MIN_ENGAGE", 20)      # noise floor: likes+comments
+OUTLIER_X      = _envf("OUTLIER_X", 1.5)      # x the account's own median
+TOP_N_PER_COMP = _envi("TOP_N_PER_COMP", 3)   # always keep each account's best N
+MAX_PER_COMP   = _envi("MAX_PER_COMP", 15)    # cap per account, so one big
+                                              # account cannot flood the board
+DAYS_BACK      = _envi("DAYS_BACK", 60)       # lookback window (free volume)
+RESULTS_LIMIT  = _envi("RESULTS_LIMIT", 50)   # posts scraped per account (costs $)
+MAX_ROWS       = _envi("MAX_ROWS", 2500)      # dashboard payload cap
 
 
 # ---------------------------------------------------------------------------
@@ -176,9 +219,12 @@ def post_type(p):
 
 
 def to_rows(posts, followers_map, today):
-    rows, below, nofol = [], 0, 0
+    """Group the scrape by account, judge each account against ITSELF, and
+    guarantee every account contributes its best few posts."""
+    by_comp, nofol, broken = {}, 0, 0
     for p in posts:
         if p.get("error") or not p.get("shortCode"):
+            broken += 1
             continue
         u = (p.get("ownerUsername") or (p.get("owner") or {}).get("username") or "")
         u = u.lower().strip()
@@ -188,29 +234,81 @@ def to_rows(posts, followers_map, today):
             continue
         likes = int(p.get("likesCount") or p.get("likes") or 0)
         comments = int(p.get("commentsCount") or p.get("comments") or 0)
-        if not ((likes + comments) / fol > MIN_ER and comments > MIN_COMMENTS):
-            below += 1
-            continue
         pt = post_type(p)
         tags = p.get("hashtags") or []
-        rows.append({
-            "post_id": p["shortCode"],
-            "tracker": TRACKER,
-            "competitor": u,
-            "caption": (p.get("caption") or "")[:5000],
-            "post_type": pt,
-            "likes": likes,
+        by_comp.setdefault(u, []).append({
+            "row": {
+                "post_id": p["shortCode"],
+                "tracker": TRACKER,
+                "competitor": u,
+                "caption": (p.get("caption") or "")[:5000],
+                "post_type": pt,
+                "likes": likes,
+                "comments": comments,
+                "followers": fol,
+                "post_date": parse_date(p.get("timestamp")),
+                "post_url": f"https://www.instagram.com/p/{p['shortCode']}/",
+                "thumbnail_url": p.get("displayUrl") or p.get("imageUrl") or None,
+                "video_url": p.get("videoUrl") or None,
+                "hashtags": ", ".join(tags) if isinstance(tags, list) else str(tags),
+                "is_video": bool(p.get("isVideo") or pt in ("Video", "Reel")),
+                "last_synced": today,
+            },
+            "eng": likes + comments,
+            "er": (likes + comments) / fol,
             "comments": comments,
-            "followers": fol,
-            "post_date": parse_date(p.get("timestamp")),
-            "post_url": f"https://www.instagram.com/p/{p['shortCode']}/",
-            "thumbnail_url": p.get("displayUrl") or p.get("imageUrl") or None,
-            "video_url": p.get("videoUrl") or None,
-            "hashtags": ", ".join(tags) if isinstance(tags, list) else str(tags),
-            "is_video": bool(p.get("isVideo") or pt in ("Video", "Reel")),
-            "last_synced": today,
+            # same weighting the dashboard sorts by, so "top N" means the same thing
+            "score": (likes + comments * 3) / fol * 100,
         })
-    print(f"  {len(rows)} viral | {below} below threshold | {nofol} no follower data")
+
+    rows, below_total, rescued_total = [], 0, 0
+    print(f"  {'账号':<24}{'抓到':>5}{'入选':>5}{'补位':>5}  基准/中位互动")
+    for u in sorted(by_comp):
+        recs = by_comp[u]
+        engs = [r["eng"] for r in recs]
+        med = statistics.median(engs) if len(engs) >= 3 else 0
+        keep_ids, kept = set(), []
+        for r in recs:
+            if r["eng"] < MIN_ENGAGE:
+                continue
+            if (r["er"] >= MIN_ER
+                    or r["comments"] >= MIN_COMMENTS
+                    or (med > 0 and r["eng"] >= OUTLIER_X * med)):
+                keep_ids.add(r["row"]["post_id"])
+                kept.append(r)
+        passed = len(kept)
+        # safety net: a quiet account still contributes its best posts
+        rescued = 0
+        if passed < TOP_N_PER_COMP:
+            for r in sorted(recs, key=lambda r: -r["score"]):
+                if r["row"]["post_id"] in keep_ids:
+                    continue
+                keep_ids.add(r["row"]["post_id"])
+                kept.append(r)
+                rescued += 1
+                if len(kept) >= TOP_N_PER_COMP:
+                    break
+        # cap: keep the best MAX_PER_COMP so one large account cannot flood
+        capped = 0
+        if len(kept) > MAX_PER_COMP:
+            kept.sort(key=lambda r: -r["score"])
+            capped = len(kept) - MAX_PER_COMP
+            kept = kept[:MAX_PER_COMP]
+        below_total += len(recs) - passed
+        rescued_total += rescued
+        rows.extend(r["row"] for r in kept)
+        note = f" · 超额截掉 {capped}" if capped else ""
+        print(f"  @{u:<23}{len(recs):>5}{len(kept):>5}{rescued:>5}  "
+              f"中位 {int(med)} 互动 · {recs[0]['row']['followers']:,} 粉{note}")
+
+    print(f"  ── 合计 {len(rows)} 条入库 "
+          f"({len(rows) - rescued_total} 达标 + {rescued_total} 补位) | "
+          f"{below_total} 条未达标 | {nofol} 条缺粉丝数 | {broken} 条抓取失败")
+    if len(rows) < 20:
+        print("  提示: 内容偏少。到仓库 Settings → Variables 调松阈值，例如")
+        print("        MIN_ER=0.01  MIN_COMMENTS=8  OUTLIER_X=1.2  TOP_N_PER_COMP=5")
+        print("        想要每个账号更多条 → 调大 MAX_PER_COMP")
+        print("        或在 Supabase 的 competitors 表多加几个竞对账号。")
     return rows
 
 
@@ -253,6 +351,9 @@ def main():
         return
     print(f"[{TRACKER}] {len(names)} competitors: {', '.join(names[:8])}"
           + (" ..." if len(names) > 8 else ""))
+    print(f"  filter: ER>={MIN_ER:.1%} OR comments>={MIN_COMMENTS} OR "
+          f"engagements>={OUTLIER_X}x own median | floor {MIN_ENGAGE} | "
+          f"keep {TOP_N_PER_COMP}-{MAX_PER_COMP} per account")
 
     profiles = run_actor(token, "apify~instagram-profile-scraper",
                          {"usernames": names}, "Step 1 profiles")
@@ -270,8 +371,10 @@ def main():
         print(f"[Suggest] skipped ({exc})")
 
     posts = run_actor(token, "apify~instagram-post-scraper",
-                      {"username": names, "resultsLimit": 50,
-                       "onlyPostsNewerThan": "30 days"}, "Step 2 posts")
+                      {"username": names, "resultsLimit": RESULTS_LIMIT,
+                       "onlyPostsNewerThan": f"{DAYS_BACK} days"}, "Step 2 posts")
+    print(f"  scraped {len(posts)} posts (last {DAYS_BACK} days, "
+          f"<= {RESULTS_LIMIT}/account)")
 
     today = datetime.now(timezone.utc).date().isoformat()
     rows = to_rows(posts, followers, today)
@@ -289,7 +392,8 @@ def main():
            method="PATCH", data={"transcript": None}, prefer="return=minimal")
         print("[Upsert] reopened previously-failed transcripts with fresh URLs")
     else:
-        print("[Upsert] nothing passed the filter")
+        print("[Upsert] nothing passed the filter — check the per-account table "
+              "above, then loosen the Variables or add more competitors")
 
     try:
         cleanup()

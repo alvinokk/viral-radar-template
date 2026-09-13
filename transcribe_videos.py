@@ -11,7 +11,7 @@ the CDN reports gone (4xx) are marked permanently; transient errors keep
 their retry window (IG URLs live ~days, and each weekly sync refreshes them).
 
 Env: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
-     WHISPER_MODEL (default small), MAX_AGE_DAYS (14), VIDEO_LIMIT (25),
+     WHISPER_MODEL (default small), MAX_AGE_DAYS (14), VIDEO_LIMIT (40),
      TIME_BUDGET_MIN (300)
 """
 
@@ -26,7 +26,7 @@ import urllib.request
 SUPABASE_URL = (os.environ.get("SUPABASE_URL") or "").rstrip("/")
 MODEL_NAME = os.environ.get("WHISPER_MODEL", "small")
 MAX_AGE_DAYS = int(os.environ.get("MAX_AGE_DAYS", "14"))
-VIDEO_LIMIT = int(os.environ.get("VIDEO_LIMIT", "25"))
+VIDEO_LIMIT = int(os.environ.get("VIDEO_LIMIT", "40"))
 TIME_BUDGET_MIN = int(os.environ.get("TIME_BUDGET_MIN", "300"))
 FAIL_MARK = "(转录失败)"
 MAX_CHARS = 5000
@@ -54,7 +54,7 @@ def fetch_pending():
         "posts?select=post_id,competitor,video_url"
         "&video_url=not.is.null&transcript=is.null"
         f"&last_synced=gte.{cutoff}"
-        "&order=post_date.desc"
+        "&order=viral_score.desc.nullslast"
     )
 
 

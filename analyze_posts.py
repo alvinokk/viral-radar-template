@@ -3,16 +3,16 @@
 AI Viral-Post Breakdown — Supabase edition
 -------------------------------------------
 Feeds each viral post (stats + caption + transcript) to an LLM and writes a
-structured breakdown to the `ai_breakdown` column. Newest posts first so a
-permanently-rejected post can never starve fresh ones out of the budget;
-model rejections (HTTP 400) are marked so the queue moves on.
+structured breakdown to the `ai_breakdown` column. Highest-scoring posts
+first so the free model budget goes to the best material; a
+permanently-rejected post is marked (HTTP 400) so the queue always moves on.
 
 Provider: GitHub Models (free, GITHUB_TOKEN with models:read) by default;
 Anthropic API when ANTHROPIC_API_KEY is set.
 
 Env: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, GITHUB_TOKEN
      NICHE (default: 自媒体内容), GH_MODEL (openai/gpt-4o-mini),
-     POST_LIMIT (60)
+     POST_LIMIT (80)
 """
 
 import json
@@ -27,7 +27,7 @@ SUPABASE_URL = (os.environ.get("SUPABASE_URL") or "").rstrip("/")
 NICHE = os.environ.get("NICHE", "自媒体内容")
 GH_MODEL = os.environ.get("GH_MODEL", "openai/gpt-4o-mini")
 CLAUDE_MODEL = os.environ.get("CLAUDE_MODEL", "claude-haiku-4-5-20251001")
-POST_LIMIT = int(os.environ.get("POST_LIMIT", "60"))
+POST_LIMIT = int(os.environ.get("POST_LIMIT", "80"))
 FAIL_MARK = "(拆解失败)"
 SKIP_TR = ("(转录失败)", "(视频不可用)", "(无口播内容)")
 
@@ -65,7 +65,7 @@ def fetch_pending():
         "posts?select=post_id,competitor,caption,transcript,post_type,"
         "likes,comments,followers"
         "&ai_breakdown=is.null"
-        "&order=post_date.desc"
+        "&order=viral_score.desc.nullslast"
     )
     # enough material to analyse: a real transcript or a decent caption
     # (length filters live here — PostgREST cannot filter on expressions)

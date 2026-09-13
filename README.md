@@ -109,9 +109,43 @@ Supabase 左下角 **Project Settings → API**,复制三样(先放记事本):
 | 现象 | 怎么办 |
 |---|---|
 | 网页 404 | 先等首跑完整结束;再看 Actions 里有没有红色失败的 workflow |
-| 抓到 0 条 | competitors 表竞对拼错 / active 没勾;Actions 的 Sync 日志看 below threshold |
+| 抓到 0 条 | 打开 Actions → Sync Content 的日志,看那张**逐个账号的表格**:`抓到` 是 0 = 账号名拼错或 active 没勾;`抓到` 有数但 `入选` 是 0 = 门槛太严,照下面「内容太少怎么调」加 Variables |
+| 内容太少 | 见下面「内容太少怎么调」 |
 | AI 拆解空 | GitHub Models 每日免费额度用完,隔天自动补 |
 | 网页标题还是「爆款雷达」 | Variables 里的 `BRAND` 没设或拼错,设好后 Actions 里重跑 Deploy Dashboard |
+
+## 内容太少怎么调(不用改代码)
+
+系统**已经**把每个竞对最近 60 天的 50 条帖子全抓下来了——Apify 的钱早就花了,只是大部分在入库前被筛掉。所以**放宽门槛完全不额外花钱**。
+
+判定规则(满足**任意一条**就入库,不是全部满足):
+
+1. 互动率 `(赞+评)/粉丝` ≥ `MIN_ER`
+2. 评论数 ≥ `MIN_COMMENTS`
+3. 互动数 ≥ `OUTLIER_X` × **该账号自己的中位互动**(所以 1000 粉的小号跟自己比,不跟 50 万粉的比)
+
+另外每个账号**保底** `TOP_N_PER_COMP` 条、**封顶** `MAX_PER_COMP` 条,避免一个大号刷屏。
+
+想要更多内容,到**你的仓库** → Settings → Secrets and variables → Actions → **Variables** 分页,New repository variable,加你要改的那几个:
+
+| Variable | 默认 | 想要更多内容就改成 | 作用 |
+|---|---|---|---|
+| `MIN_ER` | `0.02` | `0.01` | 互动率门槛,2% → 1% |
+| `MIN_COMMENTS` | `15` | `8` | 评论数门槛 |
+| `MIN_ENGAGE` | `20` | `10` | 噪音底线(赞+评太少的直接丢) |
+| `OUTLIER_X` | `1.5` | `1.2` | 超出自家中位数多少倍算爆 |
+| `TOP_N_PER_COMP` | `3` | `5` | 每个账号保底几条 |
+| `MAX_PER_COMP` | `15` | `25` | 每个账号最多几条 |
+| `DAYS_BACK` | `60` | `90` | 回看多少天(**不额外花钱**) |
+| `RESULTS_LIMIT` | `50` | `80` | 每个账号抓多少条(⚠️ **这个会加钱**) |
+
+改完到 Actions → Sync Content → Run workflow 重跑即可。
+
+> 💡 最省钱的三个旋钮是 `MIN_ER`、`MIN_COMMENTS`、`DAYS_BACK`——它们只决定「已经抓到的东西留不留」,不决定「抓多少」。只有 `RESULTS_LIMIT` 会真的加 Apify 账单。
+
+> 💡 还是太少?那就是**竞对不够**。到 Supabase → Table Editor → `competitors` 表多加几行。系统每周会自动推荐相关账号(active 未勾),勾上就开始追踪。8–15 个竞对是比较舒服的量。
+
+---
 
 ## 三条红线
 

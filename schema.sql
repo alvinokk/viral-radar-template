@@ -1,13 +1,14 @@
 -- ============================================================
--- 爆款雷达 · Supabase 建表(可重复跑,会先删旧表重建)
+-- 爆款雷达 · Supabase 建表
+--
+-- ✅ 这版可以安全重复跑:不会删任何数据。
+--    (旧版第一行是 drop table,重跑一次 = 所有帖子/转录/AI拆解/状态全没)
+--
 -- 在 Supabase → SQL Editor 整段粘贴 → Run,看到 Success 即可。
 -- ============================================================
 
-drop table if exists posts cascade;
-drop table if exists competitors cascade;
-
 -- ---------- 爆款帖子 ----------
-create table posts (
+create table if not exists posts (
   id              bigint generated always as identity primary key,
   post_id         text unique not null,
   tracker         text not null default 'IG',
@@ -34,11 +35,8 @@ create table posts (
   created_at      timestamptz default now()
 );
 
-create index posts_status_idx on posts (status);
-create index posts_score_idx  on posts (viral_score desc);
-
 -- ---------- 竞对名单(自助管理:加行=追踪,取消active=停) ----------
-create table competitors (
+create table if not exists competitors (
   id         bigint generated always as identity primary key,
   username   text not null,
   tracker    text not null default 'IG',
@@ -46,6 +44,39 @@ create table competitors (
   notes      text,
   created_at timestamptz default now()
 );
+
+-- ============================================================
+-- 数据清洗 + 约束(老版本升级上来的会用到,新装的跑了也没副作用)
+-- ============================================================
+
+-- 竞对账号名规范化:去掉 @ 和前后空格
+update competitors
+   set username = ltrim(btrim(username), '@')
+ where username <> ltrim(btrim(username), '@');
+
+-- 去掉重复竞对(重复 = sync 时同一个账号抓两次 = Apify 双倍花钱)
+delete from competitors a
+ using competitors b
+ where a.id > b.id
+   and lower(a.username) = lower(b.username)
+   and a.tracker = b.tracker;
+
+-- 以后插不进重复的了
+create unique index if not exists competitors_username_uniq
+    on competitors (lower(username), tracker);
+
+-- status 白名单:公开 key 能改这一列,不锁死的话任何人可以往里塞任意长文本
+update posts set status = '未处理'
+ where status is null or status not in ('未处理', '拍摄中', '已处理', '跳过');
+
+alter table posts drop constraint if exists posts_status_chk;
+alter table posts add  constraint posts_status_chk
+      check (status in ('未处理', '拍摄中', '已处理', '跳过'));
+
+create index if not exists posts_status_idx     on posts (status);
+create index if not exists posts_score_idx      on posts (viral_score desc nulls last);
+create index if not exists posts_competitor_idx on posts (competitor);
+create index if not exists posts_synced_idx     on posts (last_synced);
 
 -- ============================================================
 -- 安全锁(关键!):浏览器的公开 key 只能【读帖子】+【改 status 一列】。
@@ -67,11 +98,15 @@ create policy "anon read posts"    on posts for select to anon using (true);
 create policy "anon update status" on posts for update to anon using (true) with check (true);
 
 -- ============================================================
--- 竞对名单(把下面的示例换成你的竞对 IG 账号名,一行一个)
--- 只要账号名,不要 @,不要链接。改完整段一起 Run 就好。
--- 以后想加/停竞对:到 Table Editor 的 competitors 表加行或取消 active。
+-- 竞对名单:把下面换成你的竞对 IG 账号,一行一个。
+-- 只要账号名,不要 @,不要链接。重复跑不会报错、不会产生重复。
+--
+-- ⚠️ 以后要加竞对,【不要】回来重跑整段 SQL。
+--    去 Table Editor → competitors 表 → Insert row 就好,
+--    或者只选中下面这一段 insert 再按 Run。
 -- ============================================================
 insert into competitors (username, tracker, active) values
   ('example_account_1', 'IG', true),
   ('example_account_2', 'IG', true),
-  ('example_account_3', 'IG', true);
+  ('example_account_3', 'IG', true)
+on conflict do nothing;

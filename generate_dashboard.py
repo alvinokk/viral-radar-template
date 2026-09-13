@@ -49,7 +49,7 @@ def fetch_posts(key):
     """Fetch all rows from the Supabase posts table (paginated)."""
     rows, offset, page = [], 0, 1000
     while True:
-        url = f"{SUPABASE_URL}/rest/v1/posts?select=*&order=viral_score.desc"
+        url = f"{SUPABASE_URL}/rest/v1/posts?select=*&order=viral_score.desc.nullslast"
         req = urllib.request.Request(url, headers={
             "apikey": key, "Authorization": "Bearer " + key,
             "Range-Unit": "items", "Range": f"{offset}-{offset+page-1}",
