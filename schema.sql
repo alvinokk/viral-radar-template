@@ -98,15 +98,18 @@ create policy "anon read posts"    on posts for select to anon using (true);
 create policy "anon update status" on posts for update to anon using (true) with check (true);
 
 -- ============================================================
--- 竞对名单:把下面换成你的竞对 IG 账号,一行一个。
--- 只要账号名,不要 @,不要链接。重复跑不会报错、不会产生重复。
+-- ↓↓↓ 全篇只有这 5 行要改:换成你要追踪的竞对 IG 账号 ↓↓↓
 --
--- ⚠️ 以后要加竞对,【不要】回来重跑整段 SQL。
---    去 Table Editor → competitors 表 → Insert row 就好,
---    或者只选中下面这一段 insert 再按 Run。
+--   只要账号名,不要 @,不要链接
+--   ✅ nike        ❌ @nike        ❌ instagram.com/nike
+--
+--   想追踪更多?复制其中一行、改账号名即可(建议 8-15 个)
+--   重复跑不会报错,也不会产生重复竞对
 -- ============================================================
 insert into competitors (username, tracker, active) values
-  ('example_account_1', 'IG', true),
-  ('example_account_2', 'IG', true),
-  ('example_account_3', 'IG', true)
+  ('换成竞对1', 'IG', true),
+  ('换成竞对2', 'IG', true),
+  ('换成竞对3', 'IG', true),
+  ('换成竞对4', 'IG', true),
+  ('换成竞对5', 'IG', true)
 on conflict do nothing;

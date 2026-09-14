@@ -30,11 +30,28 @@
 1. 到 supabase.com → **New project**(Region 选 Singapore,数据库密码自己存好)
 2. 左边点 **SQL Editor** → New query
 3. 打开你仓库里的 `schema.sql`,**整段复制**贴进去
-4. 贴之前:把最底下的 `example_account_1/2/3` 换成**你要追踪的竞对 IG 账号名**(只要账号名,不要 @,不要链接;要几个加几行)
-5. 点 **Run**,看到 Success
-6. 左边点 **Table Editor**,确认 `posts` 和 `competitors` 两张表真的在,competitors 里是你的竞对
+4. **全篇只改最底下这 5 行**,换成你要追踪的竞对 IG 账号:
 
-> ⚠️ 这段 SQL 里有安全锁——公开钥匙只能读数据、改状态,删不掉你的数据。**不要删减这段。**
+   ```sql
+   insert into competitors (username, tracker, active) values
+     ('换成竞对1', 'IG', true),
+     ('换成竞对2', 'IG', true),
+     ('换成竞对3', 'IG', true),
+     ('换成竞对4', 'IG', true),
+     ('换成竞对5', 'IG', true)
+   on conflict do nothing;
+   ```
+
+   ⚠️ **只要账号名**,不要 `@`,不要链接。填 `nike` 对,填 `@nike` 或 `instagram.com/nike` 抓不到。
+
+5. 点 **Run**,看到 Success
+6. 左边点 **Table Editor**,确认 `posts` 和 `competitors` 两张表都在,`competitors` 里是你的 5 个竞对、`active` 都打了勾
+
+> 💡 **8–15 个竞对**才撑得起一个每周有东西看的看板。想多加就复制上面任意一行、改账号名。
+
+> ✅ 这段可以安全重复跑 —— 不会删任何数据,也不会产生重复竞对。以后要加竞对,跑 `加竞对.sql` 那一小段,或到 Table Editor 直接加行。
+
+> ⚠️ 里面「安全锁」那段不要删减——公开钥匙只能读数据、改状态,删不掉你的数据。
 
 ---
 
